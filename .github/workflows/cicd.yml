@@ -1,0 +1,29 @@
+name: tap-nhl-cicd
+on: pull_request
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    env:
+      python-version: 3.8.12
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Python ${{ env.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install meltano==1.96.0
+          meltano install
+      - name: Dynamically set environment variables
+        run: |
+          echo "SYNC_START=2021-01-01T00:00:00Z" >> $GITHUB_ENV
+          echo "SYNC_END=2021-02-01T00:00:00Z" >> $GITHUB_ENV
+          echo "DRAFT_YEAR_START=2020" >> $GITHUB_ENV
+          echo "DRAFT_YEAR_END=2021" >> $GITHUB_ENV
+      - name: Run tap-nhl to target-jsonl
+        run: |
+          meltano --environment=cicd elt tap-nhl target-jsonl

@@ -1,0 +1,83 @@
+version: 1
+send_anonymous_usage_stats: true
+project_id: 92b18cb2-b8b4-458c-9cc8-b38ec21a9fe0
+
+plugins:
+  extractors:
+  - name: tap-nhl
+    namespace: tap_nhl
+    pip_url: -e .
+    capabilities:
+    - state
+    - catalog
+    - discover
+    settings:
+    - name: start_date
+      env: SYNC_START
+    - name: end_date
+      env: SYNC_END
+    - name: draft_year_start
+      env: DRAFT_YEAR_START
+    - name: draft_year_end
+      env: DRAFT_YEAR_END
+  loaders:
+  - name: target-bigquery
+    variant: adswerve
+    pip_url: git+https://github.com/adswerve/target-bigquery.git@v0.12.0
+    config:
+      add_metadata_columns: true
+      project_id: nhl-breakouts
+      location: us-west1
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
+
+environments:
+- name: dev
+  config:
+    plugins:
+      extractors:
+      - name: tap-nhl
+        inherit_from: tap-nhl
+        select:
+        - conferences.*
+        - divisions.*
+        - draft_prospects.*
+        - draft.*
+        - live_boxscore.*
+        - live_linescore.*
+        - live_plays.*
+        - people.*
+        - schedule.*
+        - seasons.*
+        - teams.*
+      loaders:
+      - name: target-bigquery
+        inherit_from: target-bigquery
+        config:
+          dataset_id: raw_dev
+          credentials_path: ./.secrets/client_secrets.json
+          replication_method: truncate
+      - name: target-jsonl
+        inherit_from: target-jsonl
+- name: cicd
+  config:
+    plugins:
+      extractors:
+      - name: tap-nhl
+        inherit_from: tap-nhl
+        select:
+        - conferences.*
+        - divisions.*
+        - draft_prospects.*
+        - draft.*
+        - live_boxscore.*
+        - live_linescore.*
+        - live_plays.*
+        - people.*
+        - schedule.*
+        - seasons.*
+        - teams.*
+      loaders:
+      - name: target-jsonl
+        inherit_from: target-jsonl
