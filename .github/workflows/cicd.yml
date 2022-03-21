@@ -1,5 +1,9 @@
 name: tap-nhl-cicd
-on: pull_request
+on:
+  workflow_dispatch:
+  pull_request:
+    branchs:
+      - 'main'
 
 jobs:
   pipeline:
