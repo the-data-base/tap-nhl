@@ -478,11 +478,14 @@ class LiveBoxscoreStream(nhlStream):
 class LiveLinescoreStream(nhlStream):
     name = "live_linescore"
     primary_keys = ["game_id"]
+    replication_key = "game_id"
     records_jsonpath = "$.liveData.linescore"
+    ignore_parent_replication_keys = True
     path = "/game/{game_id}/feed/live"
     parent_stream_type = ScheduleStream
 
     schema = th.PropertiesList(
+        th.Property("game_id", th.IntegerType),
         th.Property("periods", th.ArrayType(th.ObjectType(
             th.Property("periodType", th.StringType),
             th.Property("startTime", th.DateTimeType),
