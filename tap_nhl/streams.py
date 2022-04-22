@@ -59,7 +59,7 @@ class ScheduleStream(nhlStream):
     name = "schedule"
     path = "/schedule"
     primary_keys = ["gamePk"]
-    replication_key = "gameDate"
+    replication_key = "scheduleDate"
     records_jsonpath = "$.dates[*].games[*]"
     schema = th.PropertiesList(
         th.Property("scheduleDate", th.DateTimeType),
@@ -127,8 +127,9 @@ class ScheduleStream(nhlStream):
                 consecutive pagination tokens are identical.
         """
         context = context if context else {}
-        context["start_date"] = self.get_starting_timestamp(context)
-        context["end_date"] = context["start_date"] + timedelta(days=1)
+        context["start_date"] = self.get_starting_timestamp(context).replace(tzinfo=None)
+        context["next_date"] = context["start_date"] + timedelta(days=1)
+        end_date = datetime.strptime(self.config.get("end_date"), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=None)
         finished = False
         decorated_request = self.request_decorator(self._request)
 
@@ -138,11 +139,11 @@ class ScheduleStream(nhlStream):
             for row in self.parse_response(resp):
                 row["scheduleDate"] = context["start_date"]
                 yield row
-            # Cycle until the next end_date of retrieved requests is after the specified end date
-            context["start_date"] = context["end_date"]
-            context["end_date"] = context["start_date"] + timedelta(days=1)
+            # Cycle until the next_date is after the specified end date
+            context["start_date"] = context["next_date"]
+            context["next_date"] = context["start_date"] + timedelta(days=1)
             logging.info(context["start_date"])
-            finished = context["end_date"] > pytz.utc.localize(datetime.strptime(self.config.get("end_date"), "%Y-%m-%dT%H:%M:%SZ"))
+            finished = context["next_date"] > end_date
 
 
     def get_url_params(
