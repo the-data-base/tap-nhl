@@ -6,7 +6,8 @@ on:
       - 'main'
 
 jobs:
-  pipeline:
+  tap-nhl-cicd:
+    name: tap-nhl-cicd
     runs-on: ubuntu-latest
     env:
       python-version: 3.8.12
