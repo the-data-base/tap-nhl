@@ -1,11 +1,12 @@
 """Stream type classes for tap-nhl."""
 import copy
 import logging
+import pendulum
 import pytz
 from datetime import datetime, timedelta
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, Iterable
+from typing import Any, Dict, Optional, Union, List, Iterable, cast
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.helpers.jsonpath import extract_jsonpath
@@ -54,6 +55,67 @@ class SeasonsStream(nhlStream):
         th.Property("wildCardInUse", th.BooleanType),
     ).to_dict()
 
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+        Args:
+            context: Stream partition or context dictionary.
+        Yields:
+            An item for every record in the response.
+        Raises:
+            RuntimeError: If a loop in pagination is detected. That is, when two
+                consecutive pagination tokens are identical.
+        """
+        context = context if context else {}
+        start_year = int(self.config.get("start_year"))
+        current_year = start_year
+        next_year = start_year + 1
+        context["current_season"] = str(current_year) + str(next_year)
+        context["next_season"] = str(next_year) + str(next_year + 1)
+        end_year = int(self.config.get("end_year"))
+        finished = False
+        decorated_request = self.request_decorator(self._request)
+
+        while not finished:
+            prepared_request = self.prepare_request(context, next_page_token=None)
+            resp = decorated_request(prepared_request, context)
+            for row in self.parse_response(resp):
+                yield row
+            # Cycle until the next_date is after the specified end date
+            current_year = next_year
+            next_year = current_year + 1
+            context["current_season"] = str(current_year) + str(next_year)
+            context["next_season"] = str(next_year) + str(next_year + 1)
+            finished = next_year > end_year
+
+    def get_url(self, context: Optional[dict]) -> int:
+        """Get stream entity URL.
+
+        Developers override this method to perform dynamic URL generation.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Returns:
+            A URL, optionally targeted to a specific partition or context.
+        """
+        url = "".join([self.url_base, self.path or ""])
+        vals = copy.copy(dict(self.config))
+        vals.update(context or {})
+        for k, v in vals.items():
+            search_text = "".join(["{", k, "}"])
+            if search_text in url:
+                url = url.replace(search_text, self._url_encode(v))
+        url = url + f"/{context['current_season']}"
+        return url
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "season_id": record["seasonId"],
+            "season_start_date": record["regularSeasonStartDate"],
+            "season_end_date": record["seasonEndDate"]
+        }
+
 class ScheduleStream(nhlStream):
     """Define custom stream."""
     name = "schedule"
@@ -61,6 +123,7 @@ class ScheduleStream(nhlStream):
     primary_keys = ["gamePk"]
     replication_key = "scheduleDate"
     records_jsonpath = "$.dates[*].games[*]"
+    parent_stream_type = SeasonsStream
     schema = th.PropertiesList(
         th.Property("scheduleDate", th.DateTimeType),
         th.Property("gamePk", th.IntegerType),
@@ -127,9 +190,12 @@ class ScheduleStream(nhlStream):
                 consecutive pagination tokens are identical.
         """
         context = context if context else {}
-        context["start_date"] = self.get_starting_timestamp(context).replace(tzinfo=None)
+        season_start_date = cast(datetime, pendulum.parse(context["season_start_date"])).replace(tzinfo=None) # from parent stream SeasonsStream
+        season_end_date = cast(datetime, pendulum.parse(context["season_end_date"])).replace(tzinfo=None) # from parent stream SeasonsStream
+        end_override_date = cast(datetime, pendulum.parse(self.config.get("end_override_date"))).replace(tzinfo=None)
+        context["start_date"] = season_start_date
         context["next_date"] = context["start_date"] + timedelta(days=1)
-        end_date = datetime.strptime(self.config.get("end_date"), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=None)
+        end_date = min(season_end_date, end_override_date) # if there is an end date override, use whichever ends sooner
         finished = False
         decorated_request = self.request_decorator(self._request)
 
@@ -142,7 +208,6 @@ class ScheduleStream(nhlStream):
             # Cycle until the next_date is after the specified end date
             context["start_date"] = context["next_date"]
             context["next_date"] = context["start_date"] + timedelta(days=1)
-            logging.info(context["start_date"])
             finished = context["next_date"] > end_date
 
 
@@ -549,6 +614,7 @@ class TeamsStream(nhlStream):
     records_jsonpath = "$.teams[*]"
     replication_key = "id"
     path = "/teams"
+    parent_stream_type = SeasonsStream
 
     schema = th.PropertiesList(
         th.Property("id", th.IntegerType),
@@ -585,10 +651,18 @@ class TeamsStream(nhlStream):
             th.Property("teamName", th.StringType),
             th.Property("link", th.StringType),
         )),
+        th.Property("season_id", th.StringType),
+        th.Property("roster", th.ObjectType(
+            th.Property("roster", th.ArrayType(th.ObjectType(
+                th.Property("person", th.ObjectType(
+                    th.Property("id", th.IntegerType)
+                ))
+            )))
+        )),
         th.Property("shortName", th.StringType),
         th.Property("officialSiteUrl", th.StringType),
         th.Property("franchiseId", th.IntegerType),
-        th.Property("active", th.BooleanType),
+        th.Property("active", th.BooleanType)
     ).to_dict()
 
     def get_url_params(
@@ -598,7 +672,8 @@ class TeamsStream(nhlStream):
         params = super().get_url_params(context, next_page_token)
         params.update(
             {
-                "expand": "team.roster"
+                "expand": "team.roster",
+                "season": context["season_id"]
             }
         )
         return params
@@ -813,7 +888,6 @@ class PeopleStream(nhlStream):
         th.Property("lastName", th.StringType),
         th.Property("primaryNumber", th.StringType),
         th.Property("birthDate", th.StringType),
-        th.Property("currentAge", th.IntegerType),
         th.Property("birthCity", th.StringType),
         th.Property("birthStateProvince", th.StringType),
         th.Property("birthCountry", th.StringType),
