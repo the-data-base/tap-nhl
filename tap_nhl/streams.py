@@ -190,10 +190,10 @@ class ScheduleStream(nhlStream):
                 consecutive pagination tokens are identical.
         """
         context = context if context else {}
-        season_start_date = datetime.strptime(context["season_start_date"], "%Y-%m-%d").replace(tzinfo=None) # from parent stream SeasonsStream
+        season_start_date = datetime.strptime(context["season_start_date"], "%Y-%m-%d") # from parent stream SeasonsStream
         season_end_date = datetime.strptime(context["season_end_date"], "%Y-%m-%d").replace(tzinfo=None) # from parent stream SeasonsStream
         override_end_date = datetime.strptime(self.config.get("override_end_date"), "%Y-%m-%d").replace(tzinfo=None) # override end date
-        context["start_date"] = season_start_date
+        context["start_date"] = datetime.strptime(season_start_date.strftime("%Y-%m-%dT%H:%M:%SZ"), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.UTC)
         context["next_date"] = context["start_date"] + timedelta(days=1)
         end_date = min(season_end_date, override_end_date) # if there is an end date override, use whichever ends sooner
 
