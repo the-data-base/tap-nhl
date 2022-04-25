@@ -16,8 +16,10 @@ plugins:
       env: START_YEAR
     - name: end_year
       env: END_YEAR
-    - name: end_override_date
-      env: END_OVERRIDE_DATE
+    - name: override_end_date
+      env: OVERRIDE_END_DATE
+    - name: start_date
+      env: SYNC_START
   loaders:
   - name: target-bigquery
     variant: adswerve

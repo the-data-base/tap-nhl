@@ -121,12 +121,12 @@ class ScheduleStream(nhlStream):
     name = "schedule"
     path = "/schedule"
     primary_keys = ["gamePk"]
-    replication_key = "scheduleDate"
     records_jsonpath = "$.dates[*].games[*]"
+    replication_key = "scheduleDate"
     parent_stream_type = SeasonsStream
     schema = th.PropertiesList(
-        th.Property("scheduleDate", th.DateTimeType),
         th.Property("gamePk", th.IntegerType),
+        th.Property("scheduleDate", th.DateTimeType),
         th.Property("link", th.StringType),
         th.Property("gameType", th.StringType),
         th.Property("season", th.StringType),
@@ -190,12 +190,13 @@ class ScheduleStream(nhlStream):
                 consecutive pagination tokens are identical.
         """
         context = context if context else {}
-        season_start_date = cast(datetime, pendulum.parse(context["season_start_date"])).replace(tzinfo=None) # from parent stream SeasonsStream
-        season_end_date = cast(datetime, pendulum.parse(context["season_end_date"])).replace(tzinfo=None) # from parent stream SeasonsStream
-        end_override_date = cast(datetime, pendulum.parse(self.config.get("end_override_date"))).replace(tzinfo=None)
+        season_start_date = datetime.strptime(context["season_start_date"], "%Y-%m-%d").replace(tzinfo=None) # from parent stream SeasonsStream
+        season_end_date = datetime.strptime(context["season_end_date"], "%Y-%m-%d").replace(tzinfo=None) # from parent stream SeasonsStream
+        override_end_date = datetime.strptime(self.config.get("override_end_date"), "%Y-%m-%d").replace(tzinfo=None) # override end date
         context["start_date"] = season_start_date
         context["next_date"] = context["start_date"] + timedelta(days=1)
-        end_date = min(season_end_date, end_override_date) # if there is an end date override, use whichever ends sooner
+        end_date = min(season_end_date, override_end_date) # if there is an end date override, use whichever ends sooner
+
         finished = False
         decorated_request = self.request_decorator(self._request)
 
@@ -206,6 +207,7 @@ class ScheduleStream(nhlStream):
                 row["scheduleDate"] = context["start_date"]
                 yield row
             # Cycle until the next_date is after the specified end date
+            logging.info("start date", context["start_date"])
             context["start_date"] = context["next_date"]
             context["next_date"] = context["start_date"] + timedelta(days=1)
             finished = context["next_date"] > end_date
