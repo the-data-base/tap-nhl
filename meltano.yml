@@ -51,7 +51,7 @@ environments:
       - name: target-bigquery
         inherit_from: target-bigquery
         config:
-          dataset_id: raw
+          dataset_id: raw_dev
           credentials_path: ./.secrets/client_secrets.json
           replication_method: truncate
       - name: target-jsonl
