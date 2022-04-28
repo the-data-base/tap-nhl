@@ -16,10 +16,6 @@ plugins:
       env: START_YEAR
     - name: end_year
       env: END_YEAR
-    - name: override_end_date
-      env: OVERRIDE_END_DATE
-    - name: start_date
-      env: SYNC_START
   loaders:
   - name: target-bigquery
     variant: adswerve
@@ -55,7 +51,7 @@ environments:
       - name: target-bigquery
         inherit_from: target-bigquery
         config:
-          dataset_id: raw_dev
+          dataset_id: raw
           credentials_path: ./.secrets/client_secrets.json
           replication_method: truncate
       - name: target-jsonl

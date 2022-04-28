@@ -111,9 +111,7 @@ class SeasonsStream(nhlStream):
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
-            "season_id": record["seasonId"],
-            "season_start_date": record["regularSeasonStartDate"],
-            "season_end_date": record["seasonEndDate"]
+            "seasonId": record["seasonId"]
         }
 
 class ScheduleStream(nhlStream):
@@ -122,11 +120,9 @@ class ScheduleStream(nhlStream):
     path = "/schedule"
     primary_keys = ["gamePk"]
     records_jsonpath = "$.dates[*].games[*]"
-    replication_key = "scheduleDate"
     parent_stream_type = SeasonsStream
     schema = th.PropertiesList(
         th.Property("gamePk", th.IntegerType),
-        th.Property("scheduleDate", th.DateTimeType),
         th.Property("link", th.StringType),
         th.Property("gameType", th.StringType),
         th.Property("season", th.StringType),
@@ -178,45 +174,6 @@ class ScheduleStream(nhlStream):
         ))
     ).to_dict()
 
-
-    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
-        """Request records from REST endpoint(s), returning response records.
-        Args:
-            context: Stream partition or context dictionary.
-        Yields:
-            An item for every record in the response.
-        Raises:
-            RuntimeError: If a loop in pagination is detected. That is, when two
-                consecutive pagination tokens are identical.
-        """
-        context = context if context else {}
-        print(">>>>", context["season_start_date"])
-        season_start_date = cast(datetime, pendulum.from_format(context["season_start_date"], "YYYY-MM-DD")).replace(tzinfo=None) # from parent stream SeasonsStream
-        print(">>>>start", season_start_date)
-        season_end_date = cast(datetime, pendulum.from_format(context["season_end_date"], "YYYY-MM-DD")).replace(tzinfo=None) # from parent stream SeasonsStream
-        print(">>>>end", season_end_date)
-        override_end_date = cast(datetime, pendulum.from_format(self.config.get("override_end_date"), "YYYY-MM-DD")).replace(tzinfo=None) # override end date
-        context["start_date"] = season_start_date
-        print(">>>>", type(context["start_date"]))
-        context["next_date"] = context["start_date"] + timedelta(days=1)
-        end_date = min(season_end_date, override_end_date) # if there is an end date override, use whichever ends sooner
-
-        finished = False
-        decorated_request = self.request_decorator(self._request)
-
-        while not finished:
-            prepared_request = self.prepare_request(context, next_page_token=None)
-            resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
-                row["scheduleDate"] = context["start_date"]
-                yield row
-            # Cycle until the next_date is after the specified end date
-            logging.info("start date", context["start_date"])
-            context["start_date"] = context["next_date"]
-            context["next_date"] = context["start_date"] + timedelta(days=1)
-            finished = context["next_date"] > end_date
-
-
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -224,7 +181,7 @@ class ScheduleStream(nhlStream):
         params = super().get_url_params(context, next_page_token)
         params.update(
             {
-                "date": datetime.strftime(context["start_date"], "%Y-%m-%d")
+                "season": context["seasonId"]
             }
         )
         return params
@@ -232,21 +189,19 @@ class ScheduleStream(nhlStream):
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
-            "game_id": record["gamePk"]
+            "gameId": record["gamePk"]
         }
 
 
 class LivePlaysStream(nhlStream):
     name = "live_plays"
-    path = "/game"
-    primary_keys = ["game_id"]
-    replication_key = "game_id"
+    primary_keys = ["gameId"]
     records_jsonpath = "$.liveData.plays.allPlays[*]"
     parent_stream_type = ScheduleStream
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("players", th.ArrayType(th.ObjectType(
             th.Property("player", th.ObjectType(
                 th.Property("id", th.IntegerType),
@@ -290,14 +245,14 @@ class LivePlaysStream(nhlStream):
 
 class LiveBoxscoreStream(nhlStream):
     name = "live_boxscore"
-    primary_keys = ["game_id"]
+    primary_keys = ["gameId"]
     records_jsonpath = "$.liveData.boxscore"
-    replication_key = "game_id"
+    replication_key = "gameId"
     parent_stream_type = ScheduleStream
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("teams", th.ObjectType(
             th.Property("away", th.ObjectType(
                 th.Property("team", th.ObjectType(
@@ -549,15 +504,15 @@ class LiveBoxscoreStream(nhlStream):
 
 class LiveLinescoreStream(nhlStream):
     name = "live_linescore"
-    primary_keys = ["game_id"]
-    replication_key = "game_id"
+    primary_keys = ["gameId"]
+    replication_key = "gameId"
     records_jsonpath = "$.liveData.linescore"
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     parent_stream_type = ScheduleStream
 
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("periods", th.ArrayType(th.ObjectType(
             th.Property("periodType", th.StringType),
             th.Property("startTime", th.DateTimeType),
@@ -679,7 +634,7 @@ class TeamsStream(nhlStream):
         params.update(
             {
                 "expand": "team.roster",
-                "season": context["season_id"]
+                "season": context["seasonId"]
             }
         )
         return params
@@ -687,8 +642,11 @@ class TeamsStream(nhlStream):
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
-            "roster": record["roster"]["roster"]
+            "roster": record["roster"]["roster"],
+            "seasonId": context["seasonId"],
+            "teamId": record["id"]
         }
+
 
 class DivisionsStream(nhlStream):
     name = "divisions"
@@ -711,6 +669,7 @@ class DivisionsStream(nhlStream):
         th.Property("active", th.BooleanType),
     ).to_dict()
 
+
 class DraftStream(nhlStream):
     def get_url(self, context: Optional[dict]) -> int:
         """Get stream entity URL.
@@ -730,13 +689,14 @@ class DraftStream(nhlStream):
             search_text = "".join(["{", k, "}"])
             if search_text in url:
                 url = url.replace(search_text, self._url_encode(v))
-        url = url + f"/{context['draft_year_start']}"
+        url = url + f"/{context['seasonId'][0:4]}"
         return url
 
     name = "draft"
     primary_keys = ["year", "$.prospect.id"]
     records_jsonpath = "$.drafts[*].rounds[*].picks[*]"
     replication_key = "year"
+    parent_stream_type = SeasonsStream
     path = "/draft"
 
     schema = th.PropertiesList(
@@ -756,64 +716,40 @@ class DraftStream(nhlStream):
         ))
     ).to_dict()
 
-    def get_starting_replication_key_value(
-        self, context: Optional[dict]
-    ) -> Optional[int]:
-        """Return starting replication key value."""
-        if self.replication_key:
-            state = self.get_context_state(context)
-            replication_key_value = state.get("replication_key_value")
-            if replication_key_value and self.replication_key == state.get(
-                "replication_key"
-            ):
-                return replication_key_value
-        return None
-
-    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
-        """Request records from REST endpoint(s), returning response records.
-        Args:
-            context: Stream partition or context dictionary.
-        Yields:
-            An item for every record in the response.
-        Raises:
-            RuntimeError: If a loop in pagination is detected. That is, when two
-                consecutive pagination tokens are identical.
-        """
-        context = context if context else {}
-        if self.get_starting_replication_key_value(context):
-            context["draft_year_start"] = int(self.get_starting_replication_key_value(context))
-        else:
-            context["draft_year_start"] = int(self.config.get("draft_year_start"))
-        context["draft_year_end"] = context["draft_year_start"] + 1#relativedelta(years=1)
-        finished = False
-        decorated_request = self.request_decorator(self._request)
-
-        while not finished:
-            prepared_request = self.prepare_request(context, next_page_token=None)
-            resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
-                yield row
-            # Cycle until the next end_date of retrieved requests is after the specified end date
-            context["draft_year_start"] = context["draft_year_end"]
-            context["draft_year_end"] = context["draft_year_start"] + 1
-            finished = context["draft_year_end"] > int(self.config.get("draft_year_end"))
-
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
-        if record["prospect"].get("id"):
-            return {
-                "prospect_id": record["prospect"]["id"]
-            }
-
+        return {
+            "prospectId": record["prospect"].get("id", "-1") # sometimes the prospect is missing and the fullName is "Void". In that case we pass a dummy prospect ID that doesnt have a corresponding resource.
+        }
 
 
 class DraftProspectsStream(nhlStream):
+
+    def get_url(self, context: Optional[dict]) -> int:
+        """Get stream entity URL.
+
+        Developers override this method to perform dynamic URL generation.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Returns:
+            A URL, optionally targeted to a specific partition or context.
+        """
+        url = "".join([self.url_base, self.path or ""])
+        vals = copy.copy(dict(self.config))
+        vals.update(context or {})
+        for k, v in vals.items():
+            search_text = "".join(["{", k, "}"])
+            if search_text in url:
+                url = url.replace(search_text, self._url_encode(v))
+        logging.info(">>url>> %s", url)
+        return url
+
     name = "draft_prospects"
     primary_keys = ["id"]
+    path = "/draft/prospects/{prospectId}"
     records_jsonpath = "$.prospects[*]"
-    replication_key = None
-    ignore_parent_replication_key = True
-    path = "/draft/prospects/{prospect_id}"
     parent_stream_type = DraftStream
 
     schema = th.PropertiesList(
@@ -916,7 +852,9 @@ class PeopleStream(nhlStream):
             th.Property("name", th.StringType),
             th.Property("type", th.StringType),
             th.Property("abbreviation", th.StringType),
-        ))
+        )),
+        th.Property("seasonId", th.StringType),
+        th.Property("teamId", th.IntegerType),
     ).to_dict()
 
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:
