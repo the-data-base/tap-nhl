@@ -1,11 +1,12 @@
 """Stream type classes for tap-nhl."""
 import copy
 import logging
+import pendulum
 import pytz
 from datetime import datetime, timedelta
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, Iterable
+from typing import Any, Dict, Optional, Union, List, Iterable, cast
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
 from singer_sdk.helpers.jsonpath import extract_jsonpath
@@ -54,15 +55,73 @@ class SeasonsStream(nhlStream):
         th.Property("wildCardInUse", th.BooleanType),
     ).to_dict()
 
+    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Request records from REST endpoint(s), returning response records.
+        Args:
+            context: Stream partition or context dictionary.
+        Yields:
+            An item for every record in the response.
+        Raises:
+            RuntimeError: If a loop in pagination is detected. That is, when two
+                consecutive pagination tokens are identical.
+        """
+        context = context if context else {}
+        start_year = int(self.config.get("start_year"))
+        current_year = start_year
+        next_year = start_year + 1
+        context["current_season"] = str(current_year) + str(next_year)
+        context["next_season"] = str(next_year) + str(next_year + 1)
+        end_year = int(self.config.get("end_year"))
+        finished = False
+        decorated_request = self.request_decorator(self._request)
+
+        while not finished:
+            prepared_request = self.prepare_request(context, next_page_token=None)
+            resp = decorated_request(prepared_request, context)
+            for row in self.parse_response(resp):
+                yield row
+            # Cycle until the next_date is after the specified end date
+            current_year = next_year
+            next_year = current_year + 1
+            context["current_season"] = str(current_year) + str(next_year)
+            context["next_season"] = str(next_year) + str(next_year + 1)
+            finished = next_year > end_year
+
+    def get_url(self, context: Optional[dict]) -> int:
+        """Get stream entity URL.
+
+        Developers override this method to perform dynamic URL generation.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Returns:
+            A URL, optionally targeted to a specific partition or context.
+        """
+        url = "".join([self.url_base, self.path or ""])
+        vals = copy.copy(dict(self.config))
+        vals.update(context or {})
+        for k, v in vals.items():
+            search_text = "".join(["{", k, "}"])
+            if search_text in url:
+                url = url.replace(search_text, self._url_encode(v))
+        url = url + f"/{context['current_season']}"
+        return url
+
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams."""
+        return {
+            "seasonId": record["seasonId"]
+        }
+
 class ScheduleStream(nhlStream):
     """Define custom stream."""
     name = "schedule"
     path = "/schedule"
     primary_keys = ["gamePk"]
-    replication_key = "scheduleDate"
     records_jsonpath = "$.dates[*].games[*]"
+    parent_stream_type = SeasonsStream
     schema = th.PropertiesList(
-        th.Property("scheduleDate", th.DateTimeType),
         th.Property("gamePk", th.IntegerType),
         th.Property("link", th.StringType),
         th.Property("gameType", th.StringType),
@@ -115,37 +174,6 @@ class ScheduleStream(nhlStream):
         ))
     ).to_dict()
 
-
-    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
-        """Request records from REST endpoint(s), returning response records.
-        Args:
-            context: Stream partition or context dictionary.
-        Yields:
-            An item for every record in the response.
-        Raises:
-            RuntimeError: If a loop in pagination is detected. That is, when two
-                consecutive pagination tokens are identical.
-        """
-        context = context if context else {}
-        context["start_date"] = self.get_starting_timestamp(context).replace(tzinfo=None)
-        context["next_date"] = context["start_date"] + timedelta(days=1)
-        end_date = datetime.strptime(self.config.get("end_date"), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=None)
-        finished = False
-        decorated_request = self.request_decorator(self._request)
-
-        while not finished:
-            prepared_request = self.prepare_request(context, next_page_token=None)
-            resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
-                row["scheduleDate"] = context["start_date"]
-                yield row
-            # Cycle until the next_date is after the specified end date
-            context["start_date"] = context["next_date"]
-            context["next_date"] = context["start_date"] + timedelta(days=1)
-            logging.info(context["start_date"])
-            finished = context["next_date"] > end_date
-
-
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
@@ -153,7 +181,7 @@ class ScheduleStream(nhlStream):
         params = super().get_url_params(context, next_page_token)
         params.update(
             {
-                "date": datetime.strftime(context["start_date"], "%Y-%m-%d")
+                "season": context["seasonId"]
             }
         )
         return params
@@ -161,21 +189,19 @@ class ScheduleStream(nhlStream):
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
-            "game_id": record["gamePk"]
+            "gameId": record["gamePk"]
         }
 
 
 class LivePlaysStream(nhlStream):
     name = "live_plays"
-    path = "/game"
-    primary_keys = ["game_id"]
-    replication_key = "game_id"
+    primary_keys = ["gameId"]
     records_jsonpath = "$.liveData.plays.allPlays[*]"
     parent_stream_type = ScheduleStream
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("players", th.ArrayType(th.ObjectType(
             th.Property("player", th.ObjectType(
                 th.Property("id", th.IntegerType),
@@ -219,14 +245,14 @@ class LivePlaysStream(nhlStream):
 
 class LiveBoxscoreStream(nhlStream):
     name = "live_boxscore"
-    primary_keys = ["game_id"]
+    primary_keys = ["gameId"]
     records_jsonpath = "$.liveData.boxscore"
-    replication_key = "game_id"
+    replication_key = "gameId"
     parent_stream_type = ScheduleStream
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("teams", th.ObjectType(
             th.Property("away", th.ObjectType(
                 th.Property("team", th.ObjectType(
@@ -478,15 +504,15 @@ class LiveBoxscoreStream(nhlStream):
 
 class LiveLinescoreStream(nhlStream):
     name = "live_linescore"
-    primary_keys = ["game_id"]
-    replication_key = "game_id"
+    primary_keys = ["gameId"]
+    replication_key = "gameId"
     records_jsonpath = "$.liveData.linescore"
     ignore_parent_replication_keys = True
-    path = "/game/{game_id}/feed/live"
+    path = "/game/{gameId}/feed/live"
     parent_stream_type = ScheduleStream
 
     schema = th.PropertiesList(
-        th.Property("game_id", th.IntegerType),
+        th.Property("gameId", th.IntegerType),
         th.Property("periods", th.ArrayType(th.ObjectType(
             th.Property("periodType", th.StringType),
             th.Property("startTime", th.DateTimeType),
@@ -549,6 +575,7 @@ class TeamsStream(nhlStream):
     records_jsonpath = "$.teams[*]"
     replication_key = "id"
     path = "/teams"
+    parent_stream_type = SeasonsStream
 
     schema = th.PropertiesList(
         th.Property("id", th.IntegerType),
@@ -585,10 +612,18 @@ class TeamsStream(nhlStream):
             th.Property("teamName", th.StringType),
             th.Property("link", th.StringType),
         )),
+        th.Property("season_id", th.StringType),
+        th.Property("roster", th.ObjectType(
+            th.Property("roster", th.ArrayType(th.ObjectType(
+                th.Property("person", th.ObjectType(
+                    th.Property("id", th.IntegerType)
+                ))
+            )))
+        )),
         th.Property("shortName", th.StringType),
         th.Property("officialSiteUrl", th.StringType),
         th.Property("franchiseId", th.IntegerType),
-        th.Property("active", th.BooleanType),
+        th.Property("active", th.BooleanType)
     ).to_dict()
 
     def get_url_params(
@@ -598,7 +633,8 @@ class TeamsStream(nhlStream):
         params = super().get_url_params(context, next_page_token)
         params.update(
             {
-                "expand": "team.roster"
+                "expand": "team.roster",
+                "season": context["seasonId"]
             }
         )
         return params
@@ -606,8 +642,11 @@ class TeamsStream(nhlStream):
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
         return {
-            "roster": record["roster"]["roster"]
+            "roster": record["roster"]["roster"],
+            "seasonId": context["seasonId"],
+            "teamId": record["id"]
         }
+
 
 class DivisionsStream(nhlStream):
     name = "divisions"
@@ -630,6 +669,7 @@ class DivisionsStream(nhlStream):
         th.Property("active", th.BooleanType),
     ).to_dict()
 
+
 class DraftStream(nhlStream):
     def get_url(self, context: Optional[dict]) -> int:
         """Get stream entity URL.
@@ -649,13 +689,14 @@ class DraftStream(nhlStream):
             search_text = "".join(["{", k, "}"])
             if search_text in url:
                 url = url.replace(search_text, self._url_encode(v))
-        url = url + f"/{context['draft_year_start']}"
+        url = url + f"/{context['seasonId'][0:4]}"
         return url
 
     name = "draft"
     primary_keys = ["year", "$.prospect.id"]
     records_jsonpath = "$.drafts[*].rounds[*].picks[*]"
     replication_key = "year"
+    parent_stream_type = SeasonsStream
     path = "/draft"
 
     schema = th.PropertiesList(
@@ -675,64 +716,40 @@ class DraftStream(nhlStream):
         ))
     ).to_dict()
 
-    def get_starting_replication_key_value(
-        self, context: Optional[dict]
-    ) -> Optional[int]:
-        """Return starting replication key value."""
-        if self.replication_key:
-            state = self.get_context_state(context)
-            replication_key_value = state.get("replication_key_value")
-            if replication_key_value and self.replication_key == state.get(
-                "replication_key"
-            ):
-                return replication_key_value
-        return None
-
-    def request_records(self, context: Optional[dict]) -> Iterable[dict]:
-        """Request records from REST endpoint(s), returning response records.
-        Args:
-            context: Stream partition or context dictionary.
-        Yields:
-            An item for every record in the response.
-        Raises:
-            RuntimeError: If a loop in pagination is detected. That is, when two
-                consecutive pagination tokens are identical.
-        """
-        context = context if context else {}
-        if self.get_starting_replication_key_value(context):
-            context["draft_year_start"] = int(self.get_starting_replication_key_value(context))
-        else:
-            context["draft_year_start"] = int(self.config.get("draft_year_start"))
-        context["draft_year_end"] = context["draft_year_start"] + 1#relativedelta(years=1)
-        finished = False
-        decorated_request = self.request_decorator(self._request)
-
-        while not finished:
-            prepared_request = self.prepare_request(context, next_page_token=None)
-            resp = decorated_request(prepared_request, context)
-            for row in self.parse_response(resp):
-                yield row
-            # Cycle until the next end_date of retrieved requests is after the specified end date
-            context["draft_year_start"] = context["draft_year_end"]
-            context["draft_year_end"] = context["draft_year_start"] + 1
-            finished = context["draft_year_end"] > int(self.config.get("draft_year_end"))
-
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""
-        if record["prospect"].get("id"):
-            return {
-                "prospect_id": record["prospect"]["id"]
-            }
-
+        return {
+            "prospectId": record["prospect"].get("id", "-1") # sometimes the prospect is missing and the fullName is "Void". In that case we pass a dummy prospect ID that doesnt have a corresponding resource.
+        }
 
 
 class DraftProspectsStream(nhlStream):
+
+    def get_url(self, context: Optional[dict]) -> int:
+        """Get stream entity URL.
+
+        Developers override this method to perform dynamic URL generation.
+
+        Args:
+            context: Stream partition or context dictionary.
+
+        Returns:
+            A URL, optionally targeted to a specific partition or context.
+        """
+        url = "".join([self.url_base, self.path or ""])
+        vals = copy.copy(dict(self.config))
+        vals.update(context or {})
+        for k, v in vals.items():
+            search_text = "".join(["{", k, "}"])
+            if search_text in url:
+                url = url.replace(search_text, self._url_encode(v))
+        logging.info(">>url>> %s", url)
+        return url
+
     name = "draft_prospects"
     primary_keys = ["id"]
+    path = "/draft/prospects/{prospectId}"
     records_jsonpath = "$.prospects[*]"
-    replication_key = None
-    ignore_parent_replication_key = True
-    path = "/draft/prospects/{prospect_id}"
     parent_stream_type = DraftStream
 
     schema = th.PropertiesList(
@@ -813,7 +830,6 @@ class PeopleStream(nhlStream):
         th.Property("lastName", th.StringType),
         th.Property("primaryNumber", th.StringType),
         th.Property("birthDate", th.StringType),
-        th.Property("currentAge", th.IntegerType),
         th.Property("birthCity", th.StringType),
         th.Property("birthStateProvince", th.StringType),
         th.Property("birthCountry", th.StringType),
@@ -836,7 +852,9 @@ class PeopleStream(nhlStream):
             th.Property("name", th.StringType),
             th.Property("type", th.StringType),
             th.Property("abbreviation", th.StringType),
-        ))
+        )),
+        th.Property("seasonId", th.StringType),
+        th.Property("teamId", th.IntegerType),
     ).to_dict()
 
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:

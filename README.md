@@ -8,17 +8,17 @@ Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 ## Flow diagram
 ```mermaid
 flowchart TD
-Root[NHL Stats API] -->|Season| Schedule[Schedule]
-Root[NHL Stats API] --> Seasons[Seasons]
+Root[NHL Stats API] -->|Year| Seasons[Seasons]
 Root[NHL Stats API] --> Conferences[Conferences]
 Root[NHL Stats API] --> Divisions[Divisions]
-Root[NHL Stats API] --> Teams[Teams]
-Root[NHL Stats API] -->|Draft Year| Draft[Draft]
+Root[NHL Stats API] -->|Year| Draft[Draft]
+Seasons[Seasons] -->|Season| Schedule[Schedule]
+Seasons[Seasons] --> |Season| Teams[Teams]
 Schedule[Schedule] -->|Game PK| Game[Game]
 Game[Game] -->|Game PK| Plays[Live Feed Plays]
 Game[Game] -->|Game PK| Linescore[Live Feed Linescore]
 Game[Game] -->|Game PK| Boxscore[Live Feed Boxscore]
-Teams[Teams] -->|Season| Roster[Roster]
+Teams[Teams] --> |Roster| Player[Players]
 Draft[Draft] -->|Prospect ID| Prospects[Prospects]
 ```
 
