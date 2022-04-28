@@ -25,10 +25,8 @@ jobs:
           meltano install
       - name: Dynamically set environment variables
         run: |
-          echo "SYNC_START=2021-01-01T00:00:00Z" >> $GITHUB_ENV
-          echo "SYNC_END=2021-02-01T00:00:00Z" >> $GITHUB_ENV
-          echo "DRAFT_YEAR_START=2020" >> $GITHUB_ENV
-          echo "DRAFT_YEAR_END=2021" >> $GITHUB_ENV
+          echo "START_YEAR=2020" >> $GITHUB_ENV
+          echo "END_YEAR=2021" >> $GITHUB_ENV
       - name: Run tap-nhl to target-jsonl
         run: |
           meltano --environment=cicd elt tap-nhl target-jsonl
