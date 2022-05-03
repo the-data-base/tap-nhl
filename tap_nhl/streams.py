@@ -612,7 +612,7 @@ class TeamsStream(nhlStream):
             th.Property("teamName", th.StringType),
             th.Property("link", th.StringType),
         )),
-        th.Property("season_id", th.StringType),
+        th.Property("seasonId", th.StringType),
         th.Property("roster", th.ObjectType(
             th.Property("roster", th.ArrayType(th.ObjectType(
                 th.Property("person", th.ObjectType(
