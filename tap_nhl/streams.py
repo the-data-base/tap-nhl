@@ -842,11 +842,6 @@ class PeopleStream(nhlStream):
         th.Property("rookie", th.BooleanType),
         th.Property("shootsCatches", th.StringType),
         th.Property("rosterStatus", th.StringType),
-        th.Property("currentTeam", th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("name", th.StringType),
-            th.Property("link", th.StringType),
-        )),
         th.Property("primaryPosition", th.ObjectType(
             th.Property("code", th.StringType),
             th.Property("name", th.StringType),
