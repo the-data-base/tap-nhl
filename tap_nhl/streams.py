@@ -215,6 +215,9 @@ class LivePlaysStream(nhlStream):
             th.Property("eventCode", th.StringType),
             th.Property("eventTypeId", th.StringType),
             th.Property("description", th.StringType),
+            th.Property("secondaryType", th.StringType),
+            th.Property("penaltySeverity", th.StringType),
+            th.Property("penaltyMinutes", th.IntegerType),
         )),
         th.Property("about", th.ObjectType(
             th.Property("eventIdx", th.IntegerType),
