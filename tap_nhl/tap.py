@@ -18,6 +18,7 @@ from tap_nhl.streams import (
     DivisionsStream,
     DraftStream,
     DraftProspectsStream,
+    ShiftsStream
 )
 
 STREAM_TYPES = [
@@ -32,6 +33,7 @@ STREAM_TYPES = [
     DivisionsStream,
     DraftStream,
     DraftProspectsStream,
+    ShiftsStream
 ]
 
 

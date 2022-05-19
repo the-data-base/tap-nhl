@@ -47,6 +47,7 @@ environments:
         - schedule.*
         - seasons.*
         - teams.*
+        - shifts.*
       loaders:
       - name: target-bigquery
         inherit_from: target-bigquery
@@ -74,6 +75,7 @@ environments:
         - schedule.*
         - seasons.*
         - teams.*
+        - shifts.*
       loaders:
       - name: target-jsonl
         inherit_from: target-jsonl
