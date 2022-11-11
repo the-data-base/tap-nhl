@@ -130,7 +130,7 @@ class LiveBoxscoreStream(nhlStream):
 
     def post_process(self, row: dict, context: Optional[dict] = None) -> Optional[dict]:
         for team_type in ["away", "home"]:
-            player_data = list()
+            player_data = []
             if row["teams"].get(team_type):
                 if row["teams"][team_type].get("players"):
                     player_ids = row["teams"][team_type]["players"].keys()
@@ -141,7 +141,7 @@ class LiveBoxscoreStream(nhlStream):
                             row["teams"][team_type]["players"][player_id]["stats"]["playerStats"] = row["teams"][team_type]["players"][player_id]["stats"][player_stats_key[0]]
                             row["teams"][team_type]["players"][player_id]["stats"].pop(player_stats_key[0])
                         player_data.append(row["teams"][team_type]["players"][player_id]) # append the nested player_ids into a list
-                    row["teams"][team_type]["players"] = player_data # assign back to players
+            row["teams"][team_type]["players"] = player_data # assign back to players
         return row
 
 
