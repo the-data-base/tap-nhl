@@ -14,6 +14,7 @@ Root[NHL Stats API] --> Divisions[Divisions]
 Root[NHL Stats API] -->|Year| Draft[Draft]
 Seasons[Seasons] -->|Season| Schedule[Schedule]
 Seasons[Seasons] --> |Season| Teams[Teams]
+Schedule[Schedule] -->|Game PK| Shifts[Shifts]
 Schedule[Schedule] -->|Game PK| Game[Game]
 Game[Game] -->|Game PK| Plays[Live Feed Plays]
 Game[Game] -->|Game PK| Linescore[Live Feed Linescore]
@@ -25,7 +26,7 @@ Draft[Draft] -->|Prospect ID| Prospects[Prospects]
 ## Installation
 
 ```bash
-pipx install git+https://github.com/gavh3/tap-nhl.git
+pipx install git+https://https://github.com/the-data-base/tap-nhl.git
 ```
 
 ## Configuration
