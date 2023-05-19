@@ -26,7 +26,7 @@ Draft[Draft] -->|Prospect ID| Prospects[Prospects]
 ## Installation
 
 ```bash
-pipx install git+https://https://github.com/the-data-base/tap-nhl.git
+pipx install git+https://github.com/the-data-base/tap-nhl.git
 ```
 
 ## Configuration
