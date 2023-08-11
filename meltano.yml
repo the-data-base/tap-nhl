@@ -18,11 +18,11 @@ plugins:
       env: END_YEAR
   loaders:
   - name: target-bigquery
-    variant: adswerve
-    pip_url: git+https://github.com/adswerve/target-bigquery.git@0.12.2
+    variant: z3z1ma
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git@0.6.8
     config:
       add_metadata_columns: true
-      project_id: nhl-breakouts
+      project: nhl-breakouts
       location: us-west1
   - name: target-jsonl
     variant: andyh1203
@@ -52,7 +52,7 @@ environments:
       - name: target-bigquery
         inherit_from: target-bigquery
         config:
-          dataset_id: raw_dev
+          dataset: raw_dev
           credentials_path: ./.secrets/client_secrets.json
           replication_method: truncate
       - name: target-jsonl
