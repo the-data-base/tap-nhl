@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class LiveBoxscoreObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class LiveBoxscoreObject():
+    schema = th.PropertiesList(
         th.Property("gameId", th.IntegerType),
         th.Property("teams", th.ObjectType(
             th.Property("away", th.ObjectType(
@@ -217,4 +216,4 @@ class LiveBoxscoreObject(StreamSchemaObject):
         #     )),
         #     th.Property("officialType", th.StringType)
         # )))
-    )
+    ).to_dict()

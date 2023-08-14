@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class DraftProspectsObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class DraftProspectsObject():
+    schema = th.PropertiesList(
         th.Property("id", th.IntegerType),
         th.Property("fullName", th.StringType),
         th.Property("link", th.StringType),
@@ -40,4 +39,4 @@ class DraftProspectsObject(StreamSchemaObject):
             th.Property("midterm", th.IntegerType),
             th.Property("draftYear", th.IntegerType),
         )),
-    )
+    ).to_dict()

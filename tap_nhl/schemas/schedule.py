@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class ScheduleObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class ScheduleObject():
+    schema = th.PropertiesList(
         th.Property("gamePk", th.IntegerType),
         th.Property("link", th.StringType),
         th.Property("gameType", th.StringType),
@@ -53,4 +52,4 @@ class ScheduleObject(StreamSchemaObject):
         th.Property("content", th.ObjectType(
             th.Property("link", th.StringType)
         ))
-    )
+    ).to_dict()

@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class TeamsObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class TeamsObject():
+    schema = th.PropertiesList(
         th.Property("id", th.IntegerType),
         th.Property("name", th.StringType),
         th.Property("link", th.StringType),
@@ -49,4 +48,4 @@ class TeamsObject(StreamSchemaObject):
         th.Property("officialSiteUrl", th.StringType),
         th.Property("franchiseId", th.IntegerType),
         th.Property("active", th.BooleanType)
-    )
+    ).to_dict()

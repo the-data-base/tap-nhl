@@ -1,8 +1,5 @@
 """Stream type classes for tap-nhl."""
 import copy
-import logging
-
-from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Iterable, cast
 
 from tap_nhl.client import nhlStream
@@ -18,10 +15,6 @@ from tap_nhl.schemas.divisions import DivisionsObject
 from tap_nhl.schemas.draft import DraftObject
 from tap_nhl.schemas.draft_prospects import DraftProspectsObject
 from tap_nhl.schemas.people import PeopleObject
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.INFO)
-
 
 class ConferencesStream(nhlStream):
     name = "conferences"
@@ -83,10 +76,10 @@ class SeasonsStream(nhlStream):
 
 class ScheduleStream(nhlStream):
     name = "schedule"
-    parent_stream_type = SeasonsStream
     path = "/schedule"
     primary_keys = ["gamePk"]
     records_jsonpath = "$.dates[*].games[*]"
+    parent_stream_type = SeasonsStream
     schema = ScheduleObject.schema
 
     def get_url_params(
@@ -239,7 +232,6 @@ class DraftProspectsStream(nhlStream):
             search_text = "".join(["{", k, "}"])
             if search_text in url:
                 url = url.replace(search_text, self._url_encode(v))
-        logging.info(">>url>> %s", url)
         return url
 
 
@@ -293,5 +285,4 @@ class ShiftsStream(nhlStream):
             search_text = "".join(["{", k, "}"])
             if search_text in url:
                 url = url.replace(search_text, self._url_encode(v))
-        logging.info(">>>url>>> %s", url)
         return url

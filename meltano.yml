@@ -13,9 +13,7 @@ plugins:
     - discover
     settings:
     - name: start_year
-      env: START_YEAR
     - name: end_year
-      env: END_YEAR
   loaders:
   - name: target-bigquery
     variant: adswerve

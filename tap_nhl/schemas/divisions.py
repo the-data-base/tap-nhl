@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class DivisionsObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class DivisionsObject():
+    schema = th.PropertiesList(
         th.Property("id", th.IntegerType),
         th.Property("name", th.StringType),
         th.Property("nameShort", th.StringType),
@@ -14,4 +13,4 @@ class DivisionsObject(StreamSchemaObject):
             th.Property("link", th.StringType),
         )),
         th.Property("active", th.BooleanType),
-    )
+    ).to_dict()

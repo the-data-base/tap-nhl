@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class LiveLinescoreObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class LiveLinescoreObject():
+    schema = th.PropertiesList(
         th.Property("gameId", th.IntegerType),
         th.Property("periods", th.ArrayType(th.ObjectType(
             th.Property("periodType", th.StringType),
@@ -57,4 +56,4 @@ class LiveLinescoreObject(StreamSchemaObject):
             th.Property("powerPlayStrength", th.StringType),
             th.Property("hasShootout", th.BooleanType),
         ))
-    )
+    ).to_dict()

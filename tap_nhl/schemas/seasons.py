@@ -1,8 +1,7 @@
 import singer_sdk.typing as th
-from tap_nhl.schemas.stream_schema_object import StreamSchemaObject
 
-class SeasonsObject(StreamSchemaObject):
-    properties = th.PropertiesList(
+class SeasonsObject():
+    schema = th.PropertiesList(
         th.Property("seasonId", th.StringType),
         th.Property("regularSeasonStartDate", th.StringType),
         th.Property("regularSeasonEndDate", th.StringType),
@@ -13,4 +12,4 @@ class SeasonsObject(StreamSchemaObject):
         th.Property("conferencesInUse", th.BooleanType),
         th.Property("divisionsInUse", th.BooleanType),
         th.Property("wildCardInUse", th.BooleanType),
-    )
+    ).to_dict()
